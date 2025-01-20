@@ -122,7 +122,7 @@ export function Footer() {
           <div>
             <h4 className="font-semibold mb-4">Get In Touch</h4>
             <ul className="space-y-2">
-              <li className="text-gray-600">Question or feedback? We&apos; d love to hear from you</li>
+              <li className="text-gray-600">Question or feedback? We&apos;d love to hear from you</li>
               <li className="text-gray-600">Email: contact@ovenexpress.com</li>
               <li className="text-gray-600">Phone: +1 (555) 123-4567</li>
             </ul>
