@@ -1,7 +1,8 @@
-const express = require("express");
-const mongoose = require("mongoose");
-// const cors = require('cors');
-const dotenv = require("dotenv");
+import express from "express";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import MenuItem from "./models/MenuItem.js";
+import Review from "./models/Review.js";
 
 dotenv.config();
 
@@ -10,20 +11,29 @@ const app = express();
 app.use(express.json());
 
 // MongoDB connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log("MongoDB connected successfully");
-  } catch (err) {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
-  }
-};
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB connected successfully"))
+  .catch((err) => console.error("MongoDB connection error:", err));
 
-connectDB();
+// API routes
+app.get("/api/menu-items", async (req, res) => {
+  try {
+    const menuItems = await MenuItem.find();
+    res.json(menuItems);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching menu items" });
+  }
+});
+
+app.get("/api/reviews", async (req, res) => {
+  try {
+    const reviews = await Review.find().populate("userId", "name").populate("menuItemId", "name");
+    res.json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching reviews" });
+  }
+});
 
 const PORT = process.env.PORT || 6001;
 app.listen(PORT, () => {

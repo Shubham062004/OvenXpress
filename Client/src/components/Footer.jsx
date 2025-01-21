@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Instagram } from 'lucide-react';
+import { Link } from "react-router-dom"
+import { Facebook, Twitter, Instagram } from "lucide-react"
+import logo from "../assets/logo.png"
 
 export function Footer() {
-  const [email, setEmail] = useState('');
 
-  // Handle smooth scrolling for anchor links
+
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -13,41 +12,18 @@ export function Footer() {
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Add your email submission logic here
-    console.log('Email submitted:', email);
-    setEmail('');
-  };
+  
 
   return (
     <footer className="bg-white pt-20 pb-10">
-      <div className="container mx-auto px-4">
-        {/* Question Section */}
-        <div className="text-center mb-20">
-          <h2 className="text-3xl font-bold mb-4">Have Question In mind?</h2>
-          <h3 className="text-xl mb-8">Let us help you</h3>
-          <form onSubmit={handleSubmit} className="flex justify-center items-center gap-4">
-            <input
-              type="email"
-              placeholder="yourmail@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="px-6 py-3 rounded-full border border-gray-300 w-full max-w-xs focus:outline-none focus:border-orange-500"
-            />
-            <button 
-              type="submit"
-              className="bg-orange-500 text-white px-8 py-3 rounded-full hover:bg-orange-600 transition-colors"
-            >
-              Send
-            </button>
-          </form>
-        </div>
+      
 
         {/* Footer Content */}
-        <div className="grid md:grid-cols-4 gap-8 mb-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+          
           <div>
             <Link to="/" className="text-2xl font-bold mb-4 block">
+              <img src={logo} />
               Oven Express
             </Link>
             <div className="flex space-x-4 mt-4">
@@ -128,14 +104,15 @@ export function Footer() {
             </ul>
           </div>
         </div>
+        
 
         {/* Copyright */}
         <div className="text-center pt-8 border-t border-gray-200">
           <p className="text-gray-600">© {new Date().getFullYear()} Oven Express. All rights reserved.</p>
         </div>
-      </div>
+      
     </footer>
-  );
+  )
 }
 
-export default Footer;
+export default Footer
