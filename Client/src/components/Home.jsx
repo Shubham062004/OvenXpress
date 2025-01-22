@@ -1,39 +1,80 @@
-// import React, { useState } from "react";
-// import { Link } from "react-router-dom";
-import { Utensils, Clock, Truck } from 'lucide-react';
-import Navbar from "./Navbar";
-import Footer from "./Footer";
+import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
+import { Utensils, Clock, Truck, Star, Minus, Plus } from "lucide-react"
+import Footer from "./Footer"
+import { Swiper, SwiperSlide } from "swiper/react"
+import { Navigation, Pagination } from "swiper/modules"
+import "swiper/css"
+import "swiper/css/navigation"
+import "swiper/css/pagination"
+import foodBowl from "../assets/6.png"
+import Navbar from "./Navbar"
 
 const HomePage = () => {
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth" });
+  const [menuItems, setMenuItems] = useState([])
+  const [cart, setCart] = useState({})
+  const [reviews, setReviews] = useState([])
+
+  useEffect(() => {
+    fetchMenuItems()
+    const savedCart = JSON.parse(localStorage.getItem("cart") || "{}")
+    setCart(savedCart)
+    fetchReviews()
+  }, [])
+
+  const fetchMenuItems = async () => {
+    try {
+      const response = await fetch("/api/menu-items")
+      const data = await response.json()
+      setMenuItems(data.slice(0, 8)) // Get first 8 items for the homepage
+    } catch (error) {
+      console.error("Error fetching menu items:", error)
     }
-  };
+  }
+
+  const updateCart = (itemId, quantity) => {
+    setCart((prevCart) => {
+      const newCart = { ...prevCart, [itemId]: (prevCart[itemId] || 0) + quantity }
+      if (newCart[itemId] <= 0) {
+        delete newCart[itemId]
+      }
+      localStorage.setItem("cart", JSON.stringify(newCart))
+      return newCart
+    })
+  }
+
+    const fetchReviews = async () => {
+    try {
+      const response = await fetch("/api/reviews")
+      const data = await response.json()
+      setReviews(data)
+    } catch (error) {
+      console.error("Error fetching reviews:", error)
+    }
+  }
 
   const steps = [
     {
       icon: <Utensils className="w-12 h-12 text-orange-500" />,
       title: "Pick Meals",
-      description: "Choose your meals from our diverse weekly menu."
+      description: "Choose your meals from our diverse weekly menu.",
     },
     {
       icon: <Clock className="w-12 h-12 text-orange-500" />,
       title: "Choose the Dates",
-      description: "Select your preferred delivery schedule."
+      description: "Select your preferred delivery schedule.",
     },
     {
       icon: <Truck className="w-12 h-12 text-orange-500" />,
       title: "Fast Deliveries",
-      description: "Get your meals delivered fresh to your door."
-    }
-  ];
+      description: "Get your meals delivered fresh to your door.",
+    },
+  ]
 
   return (
     <div>
       <Navbar />
-
+      {/* Hero Section */}
       <section className="pt-24 pb-12 overflow-hidden relative">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -42,19 +83,19 @@ const HomePage = () => {
                 Your Favourite Food Delivered Hot & Fresh
               </h1>
               <p className="text-gray-600 mb-8">
-                Healthy switched chef&apos;s do all the prep work, like peeling,
-                chopping & marinating, so you can cook a fresh food.
+                Healthy switched chef&apos;s do all the prep work, like peeling, chopping & marinating, so you can cook a
+                fresh food.
               </p>
-              <button
-                onClick={() => scrollToSection("order")}
+              <Link
+                to="/menu"
                 className="inline-flex items-center bg-orange-500 text-white px-8 py-3 rounded-full hover:bg-orange-600 transition-colors"
               >
                 Order Now →
-              </button>
+              </Link>
             </div>
             <div className="relative">
               <img
-                src="/images/food-bowl.jpg" // Make sure to add your image to the public/images folder
+                src={foodBowl}
                 alt="Fresh food bowl"
                 className="rounded-full w-full h-auto"
                 style={{
@@ -69,31 +110,138 @@ const HomePage = () => {
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-orange-500 rounded-full opacity-20" />
       </section>
 
+      {/* How It Works Section */}
       <section className="py-20 bg-gray-50">
-      <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4">How It Works</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            We bring you the best possible meal experience with our simple three-step process
-          </p>
-        </div>
-        <div className="grid md:grid-cols-3 gap-8">
-          {steps.map((step, index) => (
-            <div key={index} className="text-center">
-              <div className="flex justify-center mb-4">
-                {step.icon}
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-4">How It Works</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              We bring you the best possible meal experience with our simple three-step process
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {steps.map((step, index) => (
+              <div key={index} className="text-center">
+                <div className="flex justify-center mb-4">{step.icon}</div>
+                <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
+                <p className="text-gray-600">{step.description}</p>
               </div>
-              <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
-              <p className="text-gray-600">{step.description}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      {/* Explore Our Best Menu Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold mb-8 text-center">Explore Our Best Menu</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            {menuItems.map((item) => (
+              <div key={item._id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                <img src={item.imageUrl || "/placeholder.svg"} alt={item.name} className="w-full h-48 object-cover" />
+                <div className="p-4">
+                  <h3 className="font-semibold text-lg mb-2">{item.name}</h3>
+                  <div className="flex items-center mb-2">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${i < Math.floor(item.rating) ? "text-yellow-400" : "text-gray-300"}`}
+                      />
+                    ))}
+                    <span className="ml-2 text-sm text-gray-600">({item.reviewCount})</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">₹{item.price}</span>
+                    {cart[item._id] ? (
+                      <div className="flex items-center border rounded-full">
+                        <button
+                          onClick={() => updateCart(item._id, -1)}
+                          className="px-2 py-1 bg-gray-200 rounded-l-full"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="px-3">{cart[item._id]}</span>
+                        <button
+                          onClick={() => updateCart(item._id, 1)}
+                          className="px-2 py-1 bg-gray-200 rounded-r-full"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => updateCart(item._id, 1)}
+                        className="bg-orange-500 text-white px-4 py-2 rounded-full hover:bg-orange-600 transition-colors"
+                      >
+                        Add
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-12">
+            <Link
+              to="/menu"
+              className="inline-flex items-center bg-orange-500 text-white px-8 py-3 rounded-full hover:bg-orange-600 transition-colors"
+            >
+              View Full Menu →
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Our Happy Customers Section */}
+      <section className="py-20 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold mb-8 text-center">Our Happy Customers</h2>
+          <Swiper
+            modules={[Navigation, Pagination]}
+            spaceBetween={30}
+            slidesPerView={1}
+            navigation
+            pagination={{ clickable: true }}
+            breakpoints={{
+              640: {
+                slidesPerView: 2,
+              },
+              768: {
+                slidesPerView: 3,
+              },
+              1024: {
+                slidesPerView: 4,
+              },
+            }}
+          >
+            {reviews.map((review) => (
+              <SwiperSlide key={review._id}>
+                <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
+                  <div className="flex-grow mb-4">
+                    <p className="text-gray-600">{review.comment}</p>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">{review.userName}</span>
+                    <div className="flex items-center">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-4 h-4 ${i < review.rating ? "text-yellow-400" : "text-gray-300"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
+      </section>
 
       <Footer />
     </div>
-  );
-};
+  )
+}
 
-export default HomePage;
+export default HomePage
+
