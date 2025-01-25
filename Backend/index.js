@@ -12,6 +12,7 @@ const app = express();
 
 app.use(express.json());
 
+// CORS Configuration
 const allowedOrigins = [
   "http://localhost:5173", // Local frontend
   "https://oven-express.vercel.app", // Production frontend
@@ -31,24 +32,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// MongoDB Connection
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected successfully"))
   .catch((err) => console.error("MongoDB connection error:", err));
-
-const isAdmin = async (req, res, next) => {
-  const { email, phone } = req.body;
-  try {
-    const user = await User.findOne({ email, phone, isAdmin: true });
-    if (user) {
-      next();
-    } else {
-      res.status(403).json({ message: "Unauthorized: Admin access required" });
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Error checking admin status" });
-  }
-};
 
 // Menu Items Routes
 app.get("/api/menu-items", async (req, res) => {
