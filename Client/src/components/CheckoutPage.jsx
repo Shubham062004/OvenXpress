@@ -1,49 +1,67 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import Navbar from "./Navbar";
-import Footer from "./Footer";
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import Navbar from "./Navbar"
+// import Footer from "./Footer"
+import { useUser } from "@clerk/clerk-react"
 
 const CheckoutPage = () => {
-  const [cart, setCart] = useState({});
-  const [menuItems, setMenuItems] = useState([]);
-  const [deliveryOption, setDeliveryOption] = useState("takeaway");
-  const navigate = useNavigate();
+  const [cartItems, setCartItems] = useState([])
+  const [deliveryOption, setDeliveryOption] = useState("takeaway")
+  const [isLoading, setIsLoading] = useState(true)
+  const [paymentError, setPaymentError] = useState(null)
+  const navigate = useNavigate()
+  const { user } = useUser()
 
   useEffect(() => {
-    const savedCart = JSON.parse(localStorage.getItem('cart') || '{}');
-    setCart(savedCart);
-    fetchMenuItems();
-  }, []);
-
-  const fetchMenuItems = async () => {
-    try {
-      const response = await fetch('/api/menu-items');
-      const data = await response.json();
-      setMenuItems(data);
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
+    if (user) {
+      fetchCartItems()
     }
-  };
+  }, [user])
+
+  const fetchCartItems = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(`http://localhost:6003/api/cart/${user.id}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch cart items")
+      }
+      const data = await response.json()
+      setCartItems(data)
+    } catch (error) {
+      console.error("Error fetching cart items:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const calculateSubtotal = () => {
-    return Object.entries(cart).reduce((total, [itemId, quantity]) => {
-      const item = menuItems.find(item => item._id === itemId);
-      return total + (item ? item.price * quantity : 0);
-    }, 0);
-  };
+    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
+  }
 
   const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    const deliveryFee = deliveryOption === "delivery" ? 20 : 0;
-    return subtotal + deliveryFee;
-  };
+    const subtotal = calculateSubtotal()
+    const deliveryFee = deliveryOption === "delivery" ? 20 : 0
+    return subtotal + deliveryFee
+  }
 
-  const handlePayment = () => {
-    // Here you would typically integrate with a payment gateway
-    // For this example, we'll just simulate a successful payment
-    localStorage.removeItem('cart');
-    navigate('/order-status');
-  };
+  const handlePayment = async () => {
+    setPaymentError(null)
+    try {
+      // Here you would typically integrate with a payment gateway
+      // For this example, we'll just simulate a successful payment
+      await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate API call
+
+      // Clear the cart after successful payment
+      await fetch(`http://localhost:6003/api/cart/${user.id}`, {
+        method: "DELETE",
+      })
+
+      navigate("/order-status")
+    } catch (error) {
+      console.error("Payment error:", error)
+      setPaymentError("An error occurred during payment. Please try again.")
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -53,15 +71,18 @@ const CheckoutPage = () => {
         <div className="grid md:grid-cols-2 gap-8">
           <div>
             <h2 className="text-2xl font-semibold mb-4">Order Summary</h2>
-            {Object.entries(cart).map(([itemId, quantity]) => {
-              const item = menuItems.find(item => item._id === itemId);
-              return item ? (
-                <div key={itemId} className="flex justify-between items-center mb-2">
-                  <span>{item.name} x {quantity}</span>
-                  <span>₹{item.price * quantity}</span>
+            {isLoading ? (
+              <p>Loading order details...</p>
+            ) : (
+              cartItems.map((item) => (
+                <div key={item._id} className="flex justify-between items-center mb-2">
+                  <span>
+                    {item.name} x {item.quantity}
+                  </span>
+                  <span>₹{item.price * item.quantity}</span>
                 </div>
-              ) : null;
-            })}
+              ))
+            )}
             <div className="mt-4">
               <h3 className="text-xl font-semibold mb-2">Delivery Option</h3>
               <div className="flex space-x-4">
@@ -74,16 +95,6 @@ const CheckoutPage = () => {
                     className="mr-2"
                   />
                   Takeaway (₹0)
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    value="dine-in"
-                    checked={deliveryOption === "dine-in"}
-                    onChange={() => setDeliveryOption("dine-in")}
-                    className="mr-2"
-                  />
-                  Dine-in (₹0)
                 </label>
                 <label className="flex items-center">
                   <input
@@ -112,6 +123,7 @@ const CheckoutPage = () => {
               <span>Total</span>
               <span>₹{calculateTotal()}</span>
             </div>
+            {paymentError && <p className="text-red-500 mt-4">{paymentError}</p>}
             <button
               onClick={handlePayment}
               className="w-full bg-orange-500 text-white px-4 py-2 rounded-md mt-8 hover:bg-orange-600 transition-colors"
@@ -121,9 +133,10 @@ const CheckoutPage = () => {
           </div>
         </div>
       </main>
-      <Footer />
+      {/* <Footer /> */}
     </div>
-  );
-};
+  )
+}
 
-export default CheckoutPage;
+export default CheckoutPage
+

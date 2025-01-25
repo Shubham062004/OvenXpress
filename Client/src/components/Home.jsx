@@ -1,58 +1,90 @@
-import { useState, useEffect } from "react"
-import { Link } from "react-router-dom"
-import { Utensils, Clock, Truck, Star, Minus, Plus } from "lucide-react"
-import Footer from "./Footer"
-import { Swiper, SwiperSlide } from "swiper/react"
-import { Navigation, Pagination } from "swiper/modules"
-import "swiper/css"
-import "swiper/css/navigation"
-import "swiper/css/pagination"
-import foodBowl from "../assets/6.png"
-import Navbar from "./Navbar"
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { Utensils, Clock, Truck, Star, Minus, Plus } from "lucide-react";
+import Footer from "./Footer";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation, Pagination } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
+import foodBowl from "../assets/6.png";
+import Navbar from "./Navbar";
 
 const HomePage = () => {
-  const [menuItems, setMenuItems] = useState([])
-  const [cart, setCart] = useState({})
-  const [reviews, setReviews] = useState([])
+  const [menuItems, setMenuItems] = useState([]);
+  const [cart, setCart] = useState({});
+  const [reviews, setReviews] = useState([]);
+
+  // Dynamic backend URL
+  const backendUrl =
+  import.meta.env.MODE === "development"
+    ? import.meta.env.VITE_BACKEND_URL_DEV // Local backend
+    : import.meta.env.VITE_BACKEND_URL_PROD; // Production backend
 
   useEffect(() => {
-    fetchMenuItems()
-    const savedCart = JSON.parse(localStorage.getItem("cart") || "{}")
-    setCart(savedCart)
-    fetchReviews()
-  }, [])
+    fetchMenuItems();
+    const savedCart = JSON.parse(localStorage.getItem("cart") || "{}");
+    setCart(savedCart);
+    fetchReviews();
+  }, []);
 
+  // Fetch menu items from the backend
   const fetchMenuItems = async () => {
     try {
-      const response = await fetch("/api/menu-items")
-      const data = await response.json()
-      setMenuItems(data.slice(0, 8)) // Get first 8 items for the homepage
-    } catch (error) {
-      console.error("Error fetching menu items:", error)
-    }
-  }
-
-  const updateCart = (itemId, quantity) => {
-    setCart((prevCart) => {
-      const newCart = { ...prevCart, [itemId]: (prevCart[itemId] || 0) + quantity }
-      if (newCart[itemId] <= 0) {
-        delete newCart[itemId]
+      const response = await fetch(`${backendUrl}/api/menu-items`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch menu items");
       }
-      localStorage.setItem("cart", JSON.stringify(newCart))
-      return newCart
-    })
-  }
-
-    const fetchReviews = async () => {
-    try {
-      const response = await fetch("/api/reviews")
-      const data = await response.json()
-      setReviews(data)
+      const data = await response.json();
+      setMenuItems(data.slice(0, 8));
     } catch (error) {
-      console.error("Error fetching reviews:", error)
+      console.error("Error fetching menu items:", error);
     }
-  }
+  };
 
+  // Fetch reviews from the backend
+  const fetchReviews = async () => {
+    try {
+      const response = await fetch(`${backendUrl}/api/reviews`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch reviews");
+      }
+      const data = await response.json();
+      setReviews(data);
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+    }
+  };
+
+  // Update cart (sync with backend)
+  const updateCart = async (itemId, quantity) => {
+    try {
+      const userId = "user_2rwsNhX9hME5vfMDQHhyLv3IFqF"; // Replace with dynamic user ID
+      const response = await fetch(`${backendUrl}/api/cart`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          menuItemId: itemId,
+          quantity,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update cart");
+      }
+
+      const updatedCart = await response.json();
+      setCart(updatedCart); // Update local state with the backend response
+      localStorage.setItem("cart", JSON.stringify(updatedCart)); // Update localStorage
+    } catch (error) {
+      console.error("Error updating cart:", error);
+    }
+  };
+
+  // Steps for "How It Works" section
   const steps = [
     {
       icon: <Utensils className="w-12 h-12 text-orange-500" />,
@@ -69,7 +101,7 @@ const HomePage = () => {
       title: "Fast Deliveries",
       description: "Get your meals delivered fresh to your door.",
     },
-  ]
+  ];
 
   return (
     <div>
@@ -138,7 +170,11 @@ const HomePage = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
             {menuItems.map((item) => (
               <div key={item._id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                <img src={item.imageUrl || "/placeholder.svg"} alt={item.name} className="w-full h-48 object-cover" />
+                <img
+                  src={item.imageUrl || "/placeholder.svg"} // Ensure placeholder image exists
+                  alt={item.name}
+                  className="w-full h-48 object-cover"
+                />
                 <div className="p-4">
                   <h3 className="font-semibold text-lg mb-2">{item.name}</h3>
                   <div className="flex items-center mb-2">
@@ -240,8 +276,7 @@ const HomePage = () => {
 
       <Footer />
     </div>
-  )
-}
+  );
+};
 
-export default HomePage
-
+export default HomePage;
