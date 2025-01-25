@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 const menuItemSchema = new mongoose.Schema({
   name: {
@@ -35,9 +35,7 @@ const menuItemSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
-})
+});
 
-const MenuItem = mongoose.model("MenuItem", menuItemSchema)
-
-export default MenuItem
-
+// Correct export statement
+export default mongoose.model("MenuItem", menuItemSchema);
