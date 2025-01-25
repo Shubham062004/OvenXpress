@@ -10,6 +10,20 @@ dotenv.config();
 
 const app = express();
 
+const isAdmin = async (req, res, next) => {
+  const { email, phone } = req.body;
+  try {
+    const user = await User.findOne({ email, phone, isAdmin: true });
+    if (user) {
+      next(); // Allow the request to proceed
+    } else {
+      res.status(403).json({ message: "Unauthorized: Admin access required" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Error checking admin status" });
+  }
+};
+
 app.use(express.json());
 
 // CORS Configuration
@@ -35,9 +49,23 @@ app.use(cors(corsOptions));
 // MongoDB Connection
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log("MongoDB connected successfully"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .then(() => {
+    console.log("MongoDB connected successfully");
 
+    // Add a route to check MongoDB connection status
+    app.get("/", (req, res) => {
+      const mongoConnection = mongoose.connection.readyState === 1; // 1 means connected
+      res.json({ message: mongoConnection ? "connected" : "disconnected" });
+    });
+  })
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+
+    // Add a route to check MongoDB connection status (in case of error)
+    app.get("/", (req, res) => {
+      res.json({ message: "disconnected" });
+    });
+  });
 // Menu Items Routes
 app.get("/api/menu-items", async (req, res) => {
   try {

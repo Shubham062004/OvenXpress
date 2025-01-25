@@ -16,7 +16,10 @@ const HomePage = () => {
   const [reviews, setReviews] = useState([]);
 
   // Dynamic backend URL
-  const backendUrl = "https://oven-express-backend.vercel.app";
+  const backendUrl =
+  import.meta.env.MODE === "development"
+    ? import.meta.env.VITE_BACKEND_URL_DEV // Local backend
+    : import.meta.env.VITE_BACKEND_URL_PROD; // Production backend
 
   useEffect(() => {
     fetchMenuItems();
@@ -30,8 +33,7 @@ const HomePage = () => {
     try {
       const response = await fetch(`${backendUrl}/api/menu-items`);
       if (!response.ok) {
-        const errorResponse = await response.text(); // Log the actual response
-        throw new Error(`Failed to fetch menu items: ${errorResponse}`);
+        throw new Error("Failed to fetch menu items");
       }
       const data = await response.json();
       setMenuItems(data.slice(0, 8));
@@ -45,8 +47,7 @@ const HomePage = () => {
     try {
       const response = await fetch(`${backendUrl}/api/reviews`);
       if (!response.ok) {
-        const errorResponse = await response.text(); // Log the actual response
-        throw new Error(`Failed to fetch reviews: ${errorResponse}`);
+        throw new Error("Failed to fetch reviews");
       }
       const data = await response.json();
       setReviews(data);
