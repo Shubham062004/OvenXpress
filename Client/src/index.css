@@ -1,4 +1,211 @@
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Warm restaurant color palette */
+    --background: 35 15% 96%;
+    --foreground: 25 15% 15%;
+
+    --card: 35 25% 98%;
+    --card-foreground: 25 15% 15%;
+
+    --popover: 35 25% 98%;
+    --popover-foreground: 25 15% 15%;
+
+    /* Rich brown primary from logo inspiration */
+    --primary: 25 35% 25%;
+    --primary-foreground: 35 25% 98%;
+
+    /* Warm beige secondary */
+    --secondary: 35 25% 88%;
+    --secondary-foreground: 25 35% 25%;
+
+    /* Soft muted tones */
+    --muted: 35 20% 92%;
+    --muted-foreground: 25 15% 45%;
+
+    /* Deep red accent for warmth */
+    --accent: 0 55% 45%;
+    --accent-foreground: 35 25% 98%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 35 25% 98%;
+
+    --border: 35 20% 85%;
+    --input: 35 20% 90%;
+    --ring: 25 35% 25%;
+
+    /* Custom restaurant colors */
+    --warm-orange: 25 85% 55%;
+    --deep-red: 0 55% 35%;
+    --creamy-beige: 35 30% 94%;
+    --rich-brown: 25 45% 20%;
+    --soft-tan: 35 25% 85%;
+
+    /* Gradients */
+    --gradient-warm: linear-gradient(135deg, hsl(var(--warm-orange)), hsl(var(--deep-red)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--rich-brown) / 0.9), hsl(var(--deep-red) / 0.8));
+    --gradient-card: linear-gradient(145deg, hsl(var(--creamy-beige)), hsl(var(--card)));
+
+    /* Shadows */
+    --shadow-warm: 0 10px 30px -10px hsl(var(--warm-orange) / 0.2);
+    --shadow-soft: 0 4px 20px -4px hsl(var(--rich-brown) / 0.1);
+    --shadow-floating: 0 8px 32px -8px hsl(var(--deep-red) / 0.3);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark warm restaurant theme */
+    --background: 25 15% 8%;
+    --foreground: 35 25% 92%;
+
+    --card: 25 20% 12%;
+    --card-foreground: 35 25% 92%;
+
+    --popover: 25 20% 12%;
+    --popover-foreground: 35 25% 92%;
+
+    --primary: 35 25% 92%;
+    --primary-foreground: 25 35% 15%;
+
+    --secondary: 25 25% 18%;
+    --secondary-foreground: 35 25% 92%;
+
+    --muted: 25 20% 15%;
+    --muted-foreground: 35 15% 65%;
+
+    --accent: 0 55% 55%;
+    --accent-foreground: 35 25% 92%;
+
+    --destructive: 0 65% 45%;
+    --destructive-foreground: 35 25% 92%;
+
+    --border: 25 20% 20%;
+    --input: 25 20% 18%;
+    --ring: 35 25% 80%;
+
+    /* Dark mode custom colors */
+    --warm-orange: 25 75% 65%;
+    --deep-red: 0 55% 55%;
+    --creamy-beige: 35 20% 15%;
+    --rich-brown: 25 35% 85%;
+    --soft-tan: 35 15% 25%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Custom animations */
+  @keyframes bounce-gentle {
+    0%, 20%, 50%, 80%, 100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-8px);
+    }
+    60% {
+      transform: translateY(-4px);
+    }
+  }
+
+  @keyframes fade-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide-in-left {
+    0% {
+      opacity: 0;
+      transform: translateX(-50px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slide-in-right {
+    0% {
+      opacity: 0;
+      transform: translateX(50px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes zoom-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}
+
+@layer utilities {
+  .bg-gradient-warm {
+    background-image: linear-gradient(135deg, #ee7c2b, #8a2828);
+  }
+}
