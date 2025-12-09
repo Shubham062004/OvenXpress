@@ -1,14 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { apiClient } from '../lib/api';
 
 export interface CartItem {
-  id: string;
+  id: number;
   name: string;
   price: number;
   quantity: number;
   image: string;
   category: string;
-  specialInstructions?: string;
 }
 
 export interface Coupon {
@@ -26,12 +24,11 @@ interface CartContextType {
   discount: number;
   total: number;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  removeItem: (id: number) => void;
+  updateQuantity: (id: number, quantity: number) => void;
   clearCart: () => void;
   applyCoupon: (code: string) => boolean;
   removeCoupon: () => void;
-  createOrder: (orderData: any) => Promise<any>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -78,11 +75,11 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const removeItem = (id: string) => {
+  const removeItem = (id: number) => {
     setItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateQuantity = (id: string, quantity: number) => {
+  const updateQuantity = (id: number, quantity: number) => {
     if (quantity <= 0) {
       removeItem(id);
       return;
@@ -112,16 +109,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAppliedCoupon(null);
   };
 
-  const createOrder = async (orderData: any) => {
-    try {
-      const order = await apiClient.createOrder(orderData);
-      clearCart();
-      return order;
-    } catch (error) {
-      throw error;
-    }
-  };
-
   return (
     <CartContext.Provider
       value={{
@@ -137,7 +124,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         clearCart,
         applyCoupon,
         removeCoupon,
-        createOrder,
       }}
     >
       {children}

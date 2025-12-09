@@ -91,6 +91,7 @@ const Navbar = () => {
             <Button 
               variant="default" 
               className="bg-gradient-warm hover:opacity-90"
+              onClick={() => navigate('/login')}
             >
               Login
             </Button>
@@ -147,6 +148,10 @@ const Navbar = () => {
               <Button 
                 variant="default" 
                 className="bg-gradient-warm hover:opacity-90 w-fit"
+                onClick={() => {
+                  navigate('/login');
+                  setIsMobileMenuOpen(false);
+                }}
               >
                 Login
               </Button>
