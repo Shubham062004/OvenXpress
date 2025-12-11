@@ -1,35 +1,42 @@
-
+// backend/src/middleware/authMiddleware.js
 import jwt from 'jsonwebtoken';
+import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 
-export const protect = async (req, res, next) => {
+export const authMiddleware = asyncHandler(async (req, res, next) => {
+  let token;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer ')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return res
+      .status(401)
+      .json({ success: false, message: 'Not authorized, no token' });
+  }
+
   try {
-    const authHeader = req.headers.authorization || '';
-    if (!authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'Not authorized, no token' });
-    }
-
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password').lean();
 
-    const user = await User.findById(decoded.id);
     if (!user) {
-      return res.status(401).json({ success: false, message: 'User not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'User not found for token' });
     }
 
-    req.user = user;
+    req.user = { id: user._id.toString(), role: user.role || 'customer' };
     next();
   } catch (err) {
-    console.error('Auth error:', err.message);
-    return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+    console.error('authMiddleware error', err);
+    return res
+      .status(401)
+      .json({ success: false, message: 'Not authorized, token failed' });
   }
-};
+});
 
-export const requireRole = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-    next();
-  };
-};
+export const protect = authMiddleware;

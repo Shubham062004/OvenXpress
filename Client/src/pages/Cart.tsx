@@ -9,7 +9,17 @@ import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Minus, Trash2, ShoppingCart, MapPin, Clock, Loader2, Tag, CreditCard } from 'lucide-react';
+import {
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  MapPin,
+  Clock,
+  Loader2,
+  Tag,
+  CreditCard,
+} from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -17,57 +27,91 @@ import { orderAPI, couponAPI, userAPI } from '@/services/api';
 import OrderTypeSelector from '@/components/OrderTypeSelector';
 import CouponSuccessPopup from '@/components/CouponSuccessPopup';
 
+type OrderType = 'dine-in' | 'takeaway' | 'delivery';
+
 interface Address {
   _id: string;
   label: string;
-  address: string;
+  address?: string;
   isDefault?: boolean;
+  line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  phone?: string;
 }
 
-interface Coupon {
+interface CouponType {
   _id: string;
   code: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   type: 'percentage' | 'fixed';
   value: number;
   minOrderValue: number;
   maxDiscount?: number;
 }
 
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+  // extend as needed
+}
+
+const getErrorMessage = (err: unknown): string => {
+  if (!err || typeof err !== 'object') return String(err ?? 'Unknown error');
+  // axios-like error shape
+  const maybe = err as Record<string, unknown>;
+  const response = maybe.response as { data?: { message?: string } } | undefined;
+  if (response?.data?.message && typeof response.data.message === 'string') {
+    return response.data.message;
+  }
+  if (typeof maybe.message === 'string') return maybe.message;
+  return 'Network error';
+};
+
 const Cart = () => {
-  const { items, updateQuantity, removeItem, clearCart, getTotal, getItemCount } = useCart();
+  // useCart provides subtotal & items etc.
+  const {
+    items,
+    updateQuantity,
+    removeItem,
+    clearCart,
+    subtotal: cartSubtotal,
+  } = useCart();
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Order details
-  const [orderType, setOrderType] = useState<'dine-in' | 'takeaway' | 'delivery'>('dine-in');
+  // UI / order state
+  const [orderType, setOrderType] = useState<OrderType>('dine-in');
   const [selectedAddress, setSelectedAddress] = useState<string>('');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [specialInstructions, setSpecialInstructions] = useState('');
-  
-  // Coupon state
+
+  // coupons
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [couponDiscount, setCouponDiscount] = useState(0);
-  const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([]);
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponType | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<number>(0);
+  const [availableCoupons, setAvailableCoupons] = useState<CouponType[]>([]);
   const [showCouponSuccess, setShowCouponSuccess] = useState(false);
-  
-  // Loading states
+
+  // loading flags
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Constants
+  // pricing
   const deliveryFee = orderType === 'delivery' ? 40 : 0;
-  const gstRate = 0.18; // 18% GST
-  const subtotal = getTotal();
+  const gstRate = 0.18;
+  const subtotal = cartSubtotal ?? 0;
   const gstAmount = Math.round(subtotal * gstRate);
   const discountAmount = couponDiscount;
   const finalTotal = Math.max(0, subtotal + gstAmount + deliveryFee - discountAmount);
 
-  // Fetch user addresses and available coupons
   useEffect(() => {
     const fetchData = async () => {
       if (!isAuthenticated) {
@@ -77,33 +121,24 @@ const Cart = () => {
 
       try {
         setIsLoading(true);
-        console.log('🛒 Fetching cart data...');
 
-        // Fetch user addresses
+        // addresses
         const addressResponse = await userAPI.getAddresses();
-        const userAddresses = addressResponse.data.data || [];
+        const userAddresses = (addressResponse.data?.data ?? []) as Address[];
         setAddresses(userAddresses);
-        
-        // Set default address
-        const defaultAddress = userAddresses.find(addr => addr.isDefault);
-        if (defaultAddress) {
-          setSelectedAddress(defaultAddress._id);
-        }
-        
-        console.log(`✅ Loaded ${userAddresses.length} addresses`);
+        const defaultAddr = userAddresses.find((a) => a.isDefault);
+        if (defaultAddr) setSelectedAddress(defaultAddr._id);
 
-        // Fetch available coupons
+        // available coupons
         const couponResponse = await couponAPI.getActive();
-        const coupons = couponResponse.data.data || [];
+        const coupons = (couponResponse.data?.data ?? []) as CouponType[];
         setAvailableCoupons(coupons);
-        console.log(`✅ Loaded ${coupons.length} available coupons`);
-
-      } catch (error) {
-        console.error('❌ Error fetching cart data:', error);
+      } catch (err) {
+        console.error('Error fetching cart data', err);
         toast({
           title: 'Error loading data',
-          description: 'Some features may not work properly',
-          variant: 'destructive'
+          description: getErrorMessage(err),
+          variant: 'destructive',
         });
       } finally {
         setIsLoading(false);
@@ -113,55 +148,63 @@ const Cart = () => {
     fetchData();
   }, [isAuthenticated, toast]);
 
-  // Apply coupon
+  const itemCount = items.reduce((s: number, it: CartItem) => s + (it.quantity ?? 0), 0);
+
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) {
       toast({
         title: 'Invalid coupon',
         description: 'Please enter a coupon code',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
     setIsApplyingCoupon(true);
-    
     try {
-      console.log('🎫 Applying coupon:', couponCode);
-      
+      // backend expects orderValue or total depending on your API
       const response = await couponAPI.validate({
         code: couponCode,
         orderValue: subtotal,
-        userId: user?._id
+        userId: user?._id,
       });
 
-      if (response.data.success) {
-        const { coupon, discount } = response.data.data;
-        setAppliedCoupon(coupon);
-        setCouponDiscount(discount);
-        setShowCouponSuccess(true);
-        
-        toast({
-          title: 'Coupon Applied!',
-          description: `You saved ₹${discount} with ${coupon.code}`,
-        });
-        
-        console.log('✅ Coupon applied successfully:', coupon.code, 'Discount:', discount);
+      if (response.data?.success) {
+        const data = response.data.data as {
+          coupon: CouponType;
+          discount: number;
+        } | null;
+
+        if (data?.coupon) {
+          setAppliedCoupon(data.coupon);
+          setCouponDiscount(data.discount ?? 0);
+          setShowCouponSuccess(true);
+          toast({
+            title: 'Coupon Applied!',
+            description: `You saved ₹${data.discount ?? 0}`,
+          });
+        } else {
+          toast({
+            title: 'Coupon Error',
+            description: 'Invalid coupon response from server',
+            variant: 'destructive',
+          });
+        }
+      } else {
+        throw new Error(response.data?.message ?? 'Invalid coupon');
       }
-    } catch (error: any) {
-      console.error('❌ Error applying coupon:', error);
-      const message = error.response?.data?.message || 'Invalid or expired coupon code';
+    } catch (err) {
+      console.error('Error applying coupon', err);
       toast({
         title: 'Coupon Error',
-        description: message,
-        variant: 'destructive'
+        description: getErrorMessage(err),
+        variant: 'destructive',
       });
     } finally {
       setIsApplyingCoupon(false);
     }
   };
 
-  // Remove applied coupon
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
@@ -172,18 +215,12 @@ const Cart = () => {
     });
   };
 
-  // Place order
   const handlePlaceOrder = async () => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-
     if (items.length === 0) {
       toast({
         title: 'Empty Cart',
         description: 'Please add items to your cart before placing an order',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
@@ -192,67 +229,58 @@ const Cart = () => {
       toast({
         title: 'Address Required',
         description: 'Please select a delivery address',
-        variant: 'destructive'
+        variant: 'destructive',
       });
       return;
     }
 
+    const payload = {
+      items: items.map((item: CartItem) => ({
+        menuItem: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        notes: undefined,
+      })),
+      orderType,
+      deliveryAddress: orderType === 'delivery' ? selectedAddress : undefined,
+      specialInstructions: specialInstructions || undefined,
+      couponCode: appliedCoupon?.code,
+      pricing: {
+        subtotal,
+        gstAmount,
+        deliveryFee,
+        discountAmount,
+        finalTotal,
+      },
+    };
+
     setIsPlacingOrder(true);
-
     try {
-      console.log('📝 Placing order...');
-      
-      const orderData = {
-        items: items.map(item => ({
-          menuItem: item.id,
-          quantity: item.quantity,
-          price: item.price,
-          specialInstructions: specialInstructions || undefined
-        })),
-        orderType,
-        deliveryAddress: orderType === 'delivery' ? selectedAddress : undefined,
-        specialInstructions: specialInstructions || undefined,
-        couponCode: appliedCoupon?.code,
-        pricing: {
-          subtotal,
-          gstAmount,
-          deliveryFee,
-          discountAmount,
-          finalTotal
-        }
-      };
-
-      const response = await orderAPI.createOrder(orderData);
-
-      if (response.data.success) {
+      const response = await orderAPI.createOrder(payload);
+      if (response.data?.success) {
         const order = response.data.data;
-        console.log('✅ Order placed successfully:', order._id);
-        
-        // Clear cart
         clearCart();
-        
         toast({
           title: 'Order Placed Successfully!',
-          description: `Your order #${order.orderNumber} has been placed`,
+          description: `Your order #${order.orderNumber ?? order._id ?? '—'} has been placed`,
         });
-
-        // Navigate to order confirmation or orders page
-        navigate(`/orders/${order._id}`, { replace: true });
+        navigate(`/orders/${order._id ?? order.id}`, { replace: true });
+      } else {
+        throw new Error(response.data?.message ?? 'Failed to place order');
       }
-    } catch (error: any) {
-      console.error('❌ Error placing order:', error);
-      const message = error.response?.data?.message || 'Failed to place order. Please try again.';
+    } catch (err) {
+      console.error('Error placing order', err);
       toast({
         title: 'Order Failed',
-        description: message,
-        variant: 'destructive'
+        description: getErrorMessage(err),
+        variant: 'destructive',
       });
     } finally {
       setIsPlacingOrder(false);
     }
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -264,7 +292,6 @@ const Cart = () => {
     );
   }
 
-  // Empty cart state
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-background">
@@ -273,14 +300,9 @@ const Cart = () => {
             <ShoppingCart className="h-24 w-24 mx-auto mb-6 text-muted-foreground" />
             <h1 className="text-3xl font-bold mb-4">Your Cart is Empty</h1>
             <p className="text-muted-foreground mb-8">
-              Looks like you haven't added any items to your cart yet. 
-              Browse our menu to find delicious food!
+              Looks like you haven't added any items to your cart yet. Browse our menu to find delicious food!
             </p>
-            <Button 
-              onClick={() => navigate('/menu')}
-              className="bg-warm-orange hover:bg-warm-orange/90"
-              size="lg"
-            >
+            <Button onClick={() => navigate('/menu')} className="bg-warm-orange hover:bg-warm-orange/90" size="lg">
               Browse Menu
             </Button>
           </div>
@@ -295,62 +317,45 @@ const Cart = () => {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
             <ShoppingCart className="h-8 w-8" />
-            Your Cart ({getItemCount()} {getItemCount() === 1 ? 'item' : 'items'})
+            Your Cart ({itemCount} {itemCount === 1 ? 'item' : 'items'})
           </h1>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Cart Items */}
             <div className="lg:col-span-2 space-y-4">
-              {items.map((item) => (
+              {items.map((item: CartItem) => (
                 <Card key={item.id}>
                   <CardContent className="p-6">
                     <div className="flex items-center gap-4">
                       <img
-                        src={item.image}
+                        src={item.image ?? '/placeholder.svg'}
                         alt={item.name}
                         className="w-20 h-20 rounded-lg object-cover"
-                        onError={(e) => {
+                        onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
                           e.currentTarget.src = '/placeholder.svg';
                         }}
                       />
-                      
+
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold">{item.name}</h3>
                         <p className="text-warm-orange font-bold">₹{item.price}</p>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}
-                        >
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.id, Math.max(0, item.quantity - 1))}>
                           <Minus className="h-4 w-4" />
                         </Button>
-                        
-                        <span className="w-12 text-center font-medium">
-                          {item.quantity}
-                        </span>
-                        
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
+
+                        <span className="w-12 text-center font-medium">{item.quantity}</span>
+
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
 
                       <div className="text-right">
                         <p className="font-bold">₹{item.price * item.quantity}</p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
-                          onClick={() => removeItem(item.id)}
-                        >
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 h-8 w-8 p-0" onClick={() => removeItem(item.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -362,42 +367,31 @@ const Cart = () => {
 
             {/* Order Summary */}
             <div className="space-y-6">
-              {/* Order Type Selection */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Order Type
-                  </CardTitle>
+                  <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Order Type</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <OrderTypeSelector
-                    selectedType={orderType}
-                    onTypeChange={setOrderType}
+                    value={orderType}
+                    onChange={(v) => setOrderType(v as OrderType)}
                   />
                 </CardContent>
               </Card>
 
-              {/* Delivery Address */}
               {orderType === 'delivery' && (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Delivery Address</CardTitle>
-                  </CardHeader>
+                  <CardHeader><CardTitle>Delivery Address</CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     {addresses.length > 0 ? (
                       <Select value={selectedAddress} onValueChange={setSelectedAddress}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select delivery address" />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Select delivery address" /></SelectTrigger>
                         <SelectContent>
-                          {addresses.map((address) => (
-                            <SelectItem key={address._id} value={address._id}>
+                          {addresses.map((addr) => (
+                            <SelectItem key={addr._id} value={addr._id}>
                               <div>
-                                <div className="font-medium">{address.label}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {address.address}
-                                </div>
+                                <div className="font-medium">{addr.label}</div>
+                                <div className="text-sm text-muted-foreground">{addr.address ?? `${addr.line1 ?? ''}, ${addr.city ?? ''}`}</div>
                               </div>
                             </SelectItem>
                           ))}
@@ -406,41 +400,22 @@ const Cart = () => {
                     ) : (
                       <div className="text-center py-4">
                         <p className="text-muted-foreground mb-2">No addresses found</p>
-                        <Button
-                          variant="outline"
-                          onClick={() => navigate('/profile')}
-                        >
-                          Add Address
-                        </Button>
+                        <Button variant="outline" onClick={() => navigate('/profile')}>Add Address</Button>
                       </div>
                     )}
                   </CardContent>
                 </Card>
               )}
 
-              {/* Special Instructions */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Special Instructions</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Special Instructions</CardTitle></CardHeader>
                 <CardContent>
-                  <Textarea
-                    placeholder="Any special requests for your order..."
-                    value={specialInstructions}
-                    onChange={(e) => setSpecialInstructions(e.target.value)}
-                    rows={3}
-                  />
+                  <Textarea placeholder="Any special requests for your order..." value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} rows={3} />
                 </CardContent>
               </Card>
 
-              {/* Coupon Section */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Tag className="h-5 w-5" />
-                    Apply Coupon
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Apply Coupon</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {appliedCoupon ? (
                     <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
@@ -448,58 +423,28 @@ const Cart = () => {
                         <p className="font-medium text-green-800">{appliedCoupon.code}</p>
                         <p className="text-sm text-green-600">₹{couponDiscount} saved</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleRemoveCoupon}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        Remove
-                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleRemoveCoupon} className="text-red-500 hover:text-red-700">Remove</Button>
                     </div>
                   ) : (
                     <>
                       <div className="flex gap-2">
-                        <Input
-                          placeholder="Enter coupon code"
-                          value={couponCode}
-                          onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                          disabled={isApplyingCoupon}
-                        />
-                        <Button
-                          onClick={handleApplyCoupon}
-                          disabled={isApplyingCoupon || !couponCode.trim()}
-                        >
-                          {isApplyingCoupon ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Apply'
-                          )}
+                        <Input placeholder="Enter coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} disabled={isApplyingCoupon} />
+                        <Button onClick={handleApplyCoupon} disabled={isApplyingCoupon || !couponCode.trim()}>
+                          {isApplyingCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
                         </Button>
                       </div>
-                      
+
                       {availableCoupons.length > 0 && (
                         <div>
                           <Label className="text-sm text-muted-foreground">Available Coupons:</Label>
                           <div className="mt-2 space-y-2">
-                            {availableCoupons.slice(0, 3).map((coupon) => (
-                              <div
-                                key={coupon._id}
-                                className="p-2 border rounded cursor-pointer hover:bg-muted"
-                                onClick={() => setCouponCode(coupon.code)}
-                              >
+                            {availableCoupons.slice(0, 3).map((c) => (
+                              <div key={c._id} className="p-2 border rounded cursor-pointer hover:bg-muted" onClick={() => setCouponCode(c.code)}>
                                 <div className="flex justify-between items-center">
-                                  <span className="font-medium">{coupon.code}</span>
-                                  <Badge variant="secondary">
-                                    {coupon.type === 'percentage' 
-                                      ? `${coupon.value}% OFF` 
-                                      : `₹${coupon.value} OFF`
-                                    }
-                                  </Badge>
+                                  <span className="font-medium">{c.code}</span>
+                                  <Badge variant="secondary">{c.type === 'percentage' ? `${c.value}% OFF` : `₹${c.value} OFF`}</Badge>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {coupon.description}
-                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">{c.description}</p>
                               </div>
                             ))}
                           </div>
@@ -510,70 +455,21 @@ const Cart = () => {
                 </CardContent>
               </Card>
 
-              {/* Order Summary */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    Order Summary
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" /> Order Summary</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>₹{subtotal}</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span>GST (18%)</span>
-                    <span>₹{gstAmount}</span>
-                  </div>
-                  
-                  {deliveryFee > 0 && (
-                    <div className="flex justify-between">
-                      <span>Delivery Fee</span>
-                      <span>₹{deliveryFee}</span>
-                    </div>
-                  )}
-                  
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Coupon Discount</span>
-                      <span>-₹{discountAmount}</span>
-                    </div>
-                  )}
-                  
+                  <div className="flex justify-between"><span>Subtotal</span><span>₹{subtotal}</span></div>
+                  <div className="flex justify-between"><span>GST (18%)</span><span>₹{gstAmount}</span></div>
+                  {deliveryFee > 0 && <div className="flex justify-between"><span>Delivery Fee</span><span>₹{deliveryFee}</span></div>}
+                  {discountAmount > 0 && <div className="flex justify-between text-green-600"><span>Coupon Discount</span><span>-₹{discountAmount}</span></div>}
                   <Separator />
-                  
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span>₹{finalTotal}</span>
-                  </div>
-                  
-                  <Button
-                    className="w-full bg-warm-orange hover:bg-warm-orange/90"
-                    size="lg"
-                    onClick={handlePlaceOrder}
-                    disabled={isPlacingOrder || (orderType === 'delivery' && !selectedAddress)}
-                  >
-                    {isPlacingOrder ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Placing Order...
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="mr-2 h-4 w-4" />
-                        Place Order - ₹{finalTotal}
-                      </>
-                    )}
+                  <div className="flex justify-between text-lg font-bold"><span>Total</span><span>₹{finalTotal}</span></div>
+
+                  <Button className="w-full bg-warm-orange hover:bg-warm-orange/90" size="lg" onClick={handlePlaceOrder} disabled={isPlacingOrder || (orderType === 'delivery' && !selectedAddress)}>
+                    {isPlacingOrder ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Placing Order...</>) : (<><Clock className="mr-2 h-4 w-4" />Place Order - ₹{finalTotal}</>)}
                   </Button>
-                  
-                  {orderType === 'delivery' && !selectedAddress && (
-                    <p className="text-sm text-muted-foreground text-center">
-                      Please select a delivery address to continue
-                    </p>
-                  )}
+
+                  {orderType === 'delivery' && !selectedAddress && <p className="text-sm text-muted-foreground text-center">Please select a delivery address to continue</p>}
                 </CardContent>
               </Card>
             </div>
@@ -581,13 +477,8 @@ const Cart = () => {
         </div>
       </div>
 
-      {/* Coupon Success Popup */}
       {showCouponSuccess && appliedCoupon && (
-        <CouponSuccessPopup
-          coupon={appliedCoupon}
-          discount={couponDiscount}
-          onClose={() => setShowCouponSuccess(false)}
-        />
+        <CouponSuccessPopup coupon={appliedCoupon} discount={couponDiscount} onClose={() => setShowCouponSuccess(false)} />
       )}
     </div>
   );

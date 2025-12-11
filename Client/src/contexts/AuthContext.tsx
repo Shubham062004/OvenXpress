@@ -1,186 +1,170 @@
-// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { authAPI } from '../services/api';
-import { toast } from 'sonner';
+import { authAPI, setAuthToken } from '@/services/api';
 
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  role: 'customer' | 'staff' | 'manager' | 'founder';
-  branch?: number;
-  staffId?: string;
-  addresses?: Array<{
-    _id: string;
-    label: string;
-    address: string;
-    isDefault?: boolean;
-  }>;
-  birthday?: string;
-  permissions?: string[];
-  profileImage?: string;
-  isActive: boolean;
+type PlainObject = Record<string, unknown>;
+
+export interface User {
+  _id?: string;
+  name?: string;
+  email?: string;
+  [k: string]: unknown;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null;
   token: string | null;
+  isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (userData: any) => Promise<boolean>;
   logout: () => void;
-  updateUser: (userData: Partial<User>) => void;
-  isAuthenticated: boolean;
+  register?: (payload: PlainObject) => Promise<boolean>;
+  setUserFromLocal?: (u: User | null, t?: string | null) => void;
 }
+
+const AUTH_USER_KEY = 'user';
+const AUTH_TOKEN_KEY = 'token';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+export const useAuth = (): AuthContextType => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
+function safeParseUser(raw: string | null): User | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed as User;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Initialize auth state
-  useEffect(() => {
-    const initializeAuth = async () => {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-
-      if (storedToken && storedUser) {
-        try {
-          setToken(storedToken);
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          console.log('🔐 User loaded from storage:', parsedUser.email, 'Role:', parsedUser.role);
-
-          // Verify token with backend
-          const response = await authAPI.getMe();
-          if (response.data.success) {
-            const updatedUser = response.data.data;
-            setUser(updatedUser);
-            localStorage.setItem('user', JSON.stringify(updatedUser));
-            console.log('✅ User authenticated and updated:', updatedUser.email);
-          }
-        } catch (error) {
-          console.error('❌ Token verification failed:', error);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setToken(null);
-          setUser(null);
-        }
-      }
-      setLoading(false);
-    };
-
-    initializeAuth();
-  }, []);
-
-  const login = async (email: string, password: string): Promise<boolean> => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(() =>
+    safeParseUser(localStorage.getItem(AUTH_USER_KEY))
+  );
+  const [token, setToken] = useState<string | null>(() => {
     try {
-      console.log('🔐 Attempting login for:', email);
-      
-      const response = await authAPI.login({ email, password });
-      
-      if (response.data.success) {
-        const { user: userData, token: userToken } = response.data.data;
-        
-        setUser(userData);
-        setToken(userToken);
-        
-        localStorage.setItem('token', userToken);
-        localStorage.setItem('user', JSON.stringify(userData));
-        
-        console.log('✅ Login successful for:', userData.email, 'Role:', userData.role, 'Branch:', userData.branch || 'N/A');
-        
-        toast.success(`Welcome back, ${userData.name}!`);
-        return true;
-      }
-    } catch (error: any) {
-      console.error('❌ Login failed:', error);
-      const message = error.response?.data?.message || 'Login failed. Please try again.';
-      toast.error(message);
+      const t = localStorage.getItem(AUTH_TOKEN_KEY);
+      return t && t !== 'undefined' ? t : null;
+    } catch {
+      return null;
     }
-    return false;
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (token) {
+      setAuthToken(token);
+    } else {
+      setAuthToken(null);
+    }
+  }, [token]);
+
+  const persistAuth = (u: User | null, t: string | null) => {
+    if (t && typeof t === 'string' && t.length > 0) {
+      localStorage.setItem(AUTH_TOKEN_KEY, t);
+      setToken(t);
+      setAuthToken(t);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      setToken(null);
+      setAuthToken(null);
+    }
+
+    if (u && typeof u === 'object') {
+      try {
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(u));
+      } catch {
+        // ignore
+      }
+      setUser(u);
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY);
+      setUser(null);
+    }
   };
 
-  const register = async (userData: any): Promise<boolean> => {
-    try {
-      console.log('📝 Attempting registration for:', userData.email);
-      
-      const response = await authAPI.register(userData);
-      
-      if (response.data.success) {
-        const { user: newUser, token: userToken } = response.data.data;
-        
-        setUser(newUser);
-        setToken(userToken);
-        
-        localStorage.setItem('token', userToken);
-        localStorage.setItem('user', JSON.stringify(newUser));
-        
-        console.log('✅ Registration successful for:', newUser.email);
-        
-        toast.success(`Welcome to Oven Xpress, ${newUser.name}!`);
-        return true;
-      }
-    } catch (error: any) {
-      console.error('❌ Registration failed:', error);
-      const message = error.response?.data?.message || 'Registration failed. Please try again.';
-      toast.error(message);
+  const extractTokenAndUser = (payload: unknown): { token?: string; user?: User } => {
+    if (!payload || typeof payload !== 'object') return {};
+    const obj = payload as PlainObject;
+
+    // Common shapes:
+    // { token, user }
+    // { success: true, data: { token, user } }
+    // { data: { token, user } }
+    if (typeof obj['token'] === 'string') return { token: obj['token'] as string, user: obj['user'] as User | undefined };
+    if (obj['data'] && typeof obj['data'] === 'object') {
+      const data = obj['data'] as PlainObject;
+      const token = typeof data['token'] === 'string' ? (data['token'] as string) : undefined;
+      const user = data['user'] && typeof data['user'] === 'object' ? (data['user'] as User) : undefined;
+      if (token || user) return { token, user };
     }
-    return false;
+    if (obj['user'] && typeof obj['user'] === 'object') return { user: obj['user'] as User };
+    return {};
+  };
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const res = await authAPI.login({ email, password });
+      const payload = res?.data ?? res;
+      const { token: foundToken, user: foundUser } = extractTokenAndUser(payload);
+
+      if (!foundToken || typeof foundToken !== 'string' || foundToken.length === 0) {
+        // Ensure we never write "undefined" to localStorage
+        persistAuth(null, null);
+        setLoading(false);
+        return false;
+      }
+
+      persistAuth(foundUser ?? null, foundToken);
+      setLoading(false);
+      return true;
+    } catch (err: unknown) {
+      // On error ensure we don't persist invalid data
+      persistAuth(null, null);
+      setLoading(false);
+      return false;
+    }
   };
 
   const logout = () => {
-    console.log('🚪 Logging out user:', user?.email);
-    
-    setUser(null);
-    setToken(null);
-    
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    toast.success('Logged out successfully');
+    persistAuth(null, null);
   };
 
-  const updateUser = (userData: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      console.log('🔄 User updated:', updatedUser.email);
+  const register = async (payload: PlainObject): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const res = await authAPI.register(payload);
+      const { token: foundToken, user: foundUser } = extractTokenAndUser(res?.data ?? res);
+      if (foundToken && typeof foundToken === 'string') {
+        persistAuth(foundUser ?? null, foundToken);
+        setLoading(false);
+        return true;
+      }
+      setLoading(false);
+      return false;
+    } catch {
+      setLoading(false);
+      return false;
     }
   };
 
   const value: AuthContextType = {
     user,
     token,
+    isAuthenticated: Boolean(token),
     loading,
     login,
-    register,
     logout,
-    updateUser,
-    isAuthenticated: !!user && !!token,
+    register,
+    setUserFromLocal: (u, t) => persistAuth(u ?? null, t ?? null),
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
-export default AuthProvider;

@@ -1,158 +1,147 @@
-// controllers/authController.js
-import asyncHandler from 'express-async-handler';
+// backend/src/controllers/authController.js
 import jwt from 'jsonwebtoken';
-import Joi from 'joi';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.warn('⚠️  WARNING: JWT_SECRET not set. Set process.env.JWT_SECRET for production.');
-}
-
-const generateToken = (id) => {
-  return jwt.sign({ id }, JWT_SECRET || 'dev-secret', {
-    expiresIn: '30d',
+const signToken = (user) => {
+  const payload = { id: user._id, role: user.role, email: user.email };
+  return jwt.sign(payload, process.env.JWT_SECRET || 'devsecret', {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 };
 
-// Use Joi with labels set to 'key' so messages show "name is required" rather than "value"
-const registerSchema = Joi.object({
-  name: Joi.string().min(2).max(50).required(),
-  email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
-  phone: Joi.string().allow('', null).optional(),
-}).prefs({ errors: { label: 'key' } });
+export const loginController = async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password required' });
+    }
 
-const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
-}).prefs({ errors: { label: 'key' } });
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
 
-// POST /api/auth/register
-export const register = asyncHandler(async (req, res) => {
-  const { error } = registerSchema.validate(req.body);
-  if (error) {
-    // Joi error.details[0].message is usually user-friendly
-    return res.status(400).json({ success: false, message: error.details[0].message });
+    // If your model stores hashed password and compare method exists, use it:
+    let isMatch = false;
+    if (typeof user.comparePassword === 'function') {
+      isMatch = await user.comparePassword(password);
+    } else {
+      // fallback to bcrypt compare if comparePassword not defined
+      isMatch = await bcrypt.compare(password, user.password);
+    }
+
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const token = signToken(user);
+    const publicUser = user.toPublicJSON ? user.toPublicJSON() : {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+
+    return res.json({ success: true, data: { user: publicUser, token } });
+  } catch (err) {
+    console.error('loginController error', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
+};
 
-  const { name, email, password, phone } = req.body;
+export const registerController = async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body || {};
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email and password are required' });
+    }
 
-  const existing = await User.findOne({ email });
-  if (existing) {
-    return res.status(400).json({ success: false, message: 'User already exists' });
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'Email already registered' });
+    }
+
+    const user = new User({
+      name: name.trim(),
+      email: email.toLowerCase(),
+      password,
+      phone,
+    });
+
+    await user.save();
+
+    const token = signToken(user);
+    const publicUser = user.toPublicJSON ? user.toPublicJSON() : {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+
+    return res.status(201).json({ success: true, data: { user: publicUser, token } });
+  } catch (err) {
+    console.error('registerController error', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
+};
 
-  const user = await User.create({ name, email, password, phone });
+export const getMeController = async (req, res) => {
+  try {
+    // auth middleware should attach req.user (lean object or mongoose doc)
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
 
-  // Make sure your User model implements toPublicJSON
-  const publicUser = typeof user.toPublicJSON === 'function' ? user.toPublicJSON() : {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    createdAt: user.createdAt,
-  };
-
-  return res.status(201).json({
-    success: true,
-    data: {
-      user: publicUser,
-      token: generateToken(user._id),
-    },
-  });
-});
-
-// POST /api/auth/login
-export const login = asyncHandler(async (req, res) => {
-  const { error } = loginSchema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ success: false, message: error.details[0].message });
+    // If req.user is a mongoose doc, use toPublicJSON if available
+    const publicUser = req.user.toPublicJSON ? req.user.toPublicJSON() : req.user;
+    return res.json({ success: true, data: publicUser });
+  } catch (err) {
+    console.error('getMeController error', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
+};
 
-  const { email, password } = req.body;
+export const updateProfileController = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
 
-  const user = await User.findOne({ email });
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    const updates = {};
+    const allowed = ['name', 'phone', 'profileImage', 'preferences'];
+
+    allowed.forEach((k) => {
+      if (k in req.body) updates[k] = req.body[k];
+    });
+
+    // If password update requested
+    if (req.body.password) {
+      updates.password = req.body.password;
+    }
+
+    const updated = await User.findByIdAndUpdate(req.user._id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    const publicUser = updated && updated.toPublicJSON ? updated.toPublicJSON() : updated;
+    return res.json({ success: true, data: publicUser });
+  } catch (err) {
+    console.error('updateProfileController error', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
+};
 
-  // Ensure your User model has a comparePassword method that returns boolean
-  const isMatch = typeof user.comparePassword === 'function' ? await user.comparePassword(password) : user.password === password;
-  if (!isMatch) {
-    return res.status(401).json({ success: false, message: 'Invalid email or password' });
-  }
+export const logoutController = async (req, res) => {
+  // If you use cookies you can clear cookie here. For stateless JWT simply respond ok.
+  return res.json({ success: true, message: 'Logged out' });
+};
 
-  const publicUser = typeof user.toPublicJSON === 'function' ? user.toPublicJSON() : {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-  };
-
-  return res.json({
-    success: true,
-    data: {
-      user: publicUser,
-      token: generateToken(user._id),
-    },
-  });
-});
-
-// GET /api/auth/me
-export const getMe = asyncHandler(async (req, res) => {
-  const user = req.user;
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'Not authenticated' });
-  }
-
-  const publicUser = typeof user.toPublicJSON === 'function' ? user.toPublicJSON() : {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-  };
-
-  return res.json({
-    success: true,
-    data: publicUser,
-  });
-});
-
-// PUT /api/auth/profile
-export const updateProfile = asyncHandler(async (req, res) => {
-  const user = req.user;
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'Not authenticated' });
-  }
-
-  if (req.body.name !== undefined) user.name = req.body.name;
-  if (req.body.phone !== undefined) user.phone = req.body.phone;
-  if (req.body.profileImage !== undefined) user.profileImage = req.body.profileImage;
-  if (req.body.birthday !== undefined) user.birthday = req.body.birthday;
-  if (req.body.preferences !== undefined) user.preferences = req.body.preferences;
-
-  if (Array.isArray(req.body.addresses)) {
-    user.addresses = req.body.addresses;
-  }
-
-  if (req.body.password) {
-    user.password = req.body.password; // pre-save hook should hash
-  }
-
-  const saved = await user.save();
-  const publicUser = typeof saved.toPublicJSON === 'function' ? saved.toPublicJSON() : {
-    id: saved._id,
-    name: saved.name,
-    email: saved.email,
-    phone: saved.phone,
-  };
-
-  return res.json({
-    success: true,
-    data: {
-      user: publicUser,
-      token: generateToken(saved._1d),
-    },
-  });
-});
+export default {
+  loginController,
+  registerController,
+  getMeController,
+  updateProfileController,
+  logoutController,
+};

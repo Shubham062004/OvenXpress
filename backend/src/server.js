@@ -1,4 +1,5 @@
-// server.js
+// backend/src/server.js
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -8,114 +9,103 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-
 import connectDB from './config/database.js';
+
+import userRoutes from './routes/userRoutes.js';
+import couponRoutes from './routes/couponRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
+import menuRoutes from './routes/menuRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 
 dotenv.config();
 
-// Basic env checks
+const FRONTEND_ORIGINS = ['http://localhost:5173', 'http://localhost:8080'];
 const PORT = process.env.PORT || 3000;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 const app = express();
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: CLIENT_URL,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: FRONTEND_ORIGINS,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
   },
 });
 
-// Attach io to app so controllers can use it later
 app.set('io', io);
 
-// Connect DB
-connectDB();
+// DB
+connectDB()
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(console.error);
 
-// Security & middleware
+// Security / CORS
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
   })
 );
 
-// CORS - for local dev you can set origin to true or CLIENT_URL
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (FRONTEND_ORIGINS.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'), false);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
-// Rate limiter for /api
+app.options('*', cors());
+
+// Parsers, logging
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(compression());
+app.use(morgan('dev'));
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 app.use('/api', apiLimiter);
 
-// Body parsers
-// Place parsers BEFORE routes
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Optional debug logger - only in development
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
-    console.log(`\n[DEV] ${req.method} ${req.path}`);
-    console.log('content-type:', req.headers['content-type']);
-    console.log('body:', req.body);
-    next();
-  });
-}
-
-app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-
-// Health check
-app.get('/health', (req, res) => {
+// Health
+app.get('/health', (req, res) =>
   res.json({
     status: 'ok',
     env: process.env.NODE_ENV || 'development',
     time: new Date().toISOString(),
-  });
-});
+  })
+);
 
-// API routes
+// Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/menu', menuRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/orders', orderRoutes);
 
-// 404 for API
-app.use('/api/*', (req, res) => {
-  res.status(404).json({ success: false, message: 'API route not found' });
+// 404 fallback
+app.all('*', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// JSON parse error handler (malformed JSON)
-app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ success: false, message: 'Malformed JSON in request body' });
-  }
-  next(err);
-});
-
-// Basic Socket.io (you can extend later)
+// Socket
 io.on('connection', (socket) => {
   console.log('👤 Socket connected:', socket.id);
 
   socket.on('join_room', ({ userId, branchId, role }) => {
-    if (role === 'customer' && userId) {
-      socket.join(`user_${userId}`);
-    }
-    if (branchId) {
-      socket.join(`branch_${branchId}`);
-    }
-    if (role === 'founder') {
-      socket.join('founder');
-    }
-    console.log('🏠 Rooms for socket:', socket.id, [...socket.rooms]);
+    if (role === 'customer' && userId) socket.join(`user_${userId}`);
+    if (branchId) socket.join(`branch_${branchId}`);
+    if (role === 'founder') socket.join('founder');
   });
 
   socket.on('disconnect', () => {
@@ -123,18 +113,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  const status = err.status || 500;
-  const message = err.message || 'Internal Server Error';
-  res.status(status).json({ success: false, message });
-});
-
-// Start server
 httpServer.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
-  console.log(`🌐 CORS allowed origin: ${CLIENT_URL}`);
+  console.log('🌐 CORS allowed origins:', FRONTEND_ORIGINS);
 });
 
 export default app;

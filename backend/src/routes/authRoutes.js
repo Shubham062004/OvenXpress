@@ -1,13 +1,18 @@
-
+// backend/src/routes/authRoutes.js
 import express from 'express';
-import { register, login, getMe, updateProfile } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import {
+  loginController,
+  registerController,
+  getMeController,
+  updateProfileController,
+} from '../controllers/authController.js';
 
 const router = express.Router();
 
-router.post('/register', register);
-router.post('/login', login);
-router.get('/me', protect, getMe);
-router.put('/profile', protect, updateProfile);
+router.post('/login', loginController);
+router.post('/register', registerController);
+router.get('/me', protect, getMeController);
+router.put('/profile', protect, updateProfileController);
 
 export default router;

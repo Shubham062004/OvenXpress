@@ -1,17 +1,23 @@
-// Simple IndexedDB wrapper for offline caching
+// src/services/offlineCache.ts
+// Simple IndexedDB wrapper for offline caching (TypeScript)
+
 const DB_NAME = 'oven-express-cache';
 const DB_VERSION = 1;
 const STORES = ['menu', 'orders', 'user'] as const;
-
 type StoreName = (typeof STORES)[number];
 
-// Generic cacheable item type
 export interface CacheItem {
   id: string;
   [key: string]: unknown;
 }
 
-// Initialize the database
+const uid = () => {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) {
+    return (crypto as any).randomUUID();
+  }
+  return `${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+};
+
 const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -30,7 +36,13 @@ const initDB = (): Promise<IDBDatabase> => {
   });
 };
 
-// Save data to cache
+const ensureIdOnItem = (obj: any): CacheItem => {
+  if (!obj) return { id: uid() };
+  if (obj.id) return obj as CacheItem;
+  if (obj._id) return { ...obj, id: String(obj._id) } as CacheItem;
+  return { ...obj, id: uid() } as CacheItem;
+};
+
 export const saveToCache = async (
   storeName: StoreName,
   data: CacheItem | CacheItem[]
@@ -43,13 +55,17 @@ export const saveToCache = async (
 
       const addItem = (item: CacheItem): Promise<void> =>
         new Promise((res, rej) => {
-          const req = store.put(item);
+          // ensure item has id
+          const prepared = ensureIdOnItem(item);
+          const req = store.put(prepared);
           req.onsuccess = () => res();
-          req.onerror = () => rej(new Error('Failed to save item to cache'));
+          req.onerror = (e) => {
+            rej(new Error('Failed to save item to cache'));
+          };
         });
 
       const operation = Array.isArray(data)
-        ? Promise.all(data.map(addItem)).then(() => undefined)
+        ? Promise.all(data.map((d) => addItem(d))).then(() => undefined)
         : addItem(data);
 
       operation
@@ -66,11 +82,11 @@ export const saveToCache = async (
     });
   } catch (error) {
     console.error('Error saving to cache:', error);
+    // swallow, do not rethrow in production path — caller may handle
     throw error;
   }
 };
 
-// Get data from cache
 export const getFromCache = async <T = CacheItem>(
   storeName: StoreName,
   id?: string
@@ -108,7 +124,6 @@ export const getFromCache = async <T = CacheItem>(
   }
 };
 
-// Clear cache for a specific store
 export const clearCache = async (storeName: StoreName): Promise<void> => {
   try {
     const db = await initDB();
@@ -128,7 +143,6 @@ export const clearCache = async (storeName: StoreName): Promise<void> => {
   }
 };
 
-// Check if we're online
 export const isOnline = (): boolean => navigator.onLine;
 
 const offlineCache = {
@@ -138,5 +152,4 @@ const offlineCache = {
   isOnline,
 };
 
-// ✅ Default export (so api.js can import offlineCache directly)
 export default offlineCache;
