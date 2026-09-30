@@ -107,7 +107,15 @@ const Login: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-warm-orange hover:text-warm-orange/90 font-medium"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -152,12 +160,9 @@ const Login: React.FC = () => {
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Back to Home</Link>
           </div>
 
-          <div className="mt-6 p-3 bg-muted rounded-md text-xs text-muted-foreground">
-            <p className="font-medium mb-1">Demo Credentials:</p>
-            <p>Customer: customer@demo.com / demo123</p>
-            <p>Staff: staff@demo.com / demo123</p>
-            <p>Manager: manager@demo.com / demo123</p>
-            <p>Founder: founder@demo.com / demo123</p>
+          <div className="mt-6 p-3 bg-muted rounded-md text-xs text-muted-foreground text-center">
+            <p className="font-medium text-foreground">Welcome to Oven Xpress Customer Ordering</p>
+            <p className="mt-0.5">Discover our freshly baked oven delights delivered to your doorstep.</p>
           </div>
         </CardContent>
       </Card>

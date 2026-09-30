@@ -1,15 +1,27 @@
 // backend/src/controllers/couponController.js
-
-import Coupon from '../models/Coupon.js';
+import { query } from '../config/database.js';
 
 // GET /api/coupons
 export const getActiveCoupons = async (req, res) => {
   try {
-    const coupons = await Coupon.find({ active: true }).lean();
-    res.json({ success: true, data: coupons });
+    const result = await query(
+      `SELECT 
+        id,
+        code,
+        discount,
+        "discountType" as type,
+        "minOrder" as "minOrderValue",
+        "maxDiscount",
+        "expiresAt"
+       FROM "Coupon"
+       WHERE "isActive" = true AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+       ORDER BY "minOrder" ASC`
+    );
+
+    return res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('getActiveCoupons error', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -20,61 +32,73 @@ export const validateCoupon = async (req, res) => {
     const { code, orderValue = 0 } = req.body;
 
     if (!code) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Coupon code is required' });
+      return res.status(400).json({ success: false, message: 'Coupon code is required' });
     }
 
-    const coupon = await Coupon.findOne({
-      code: code.toUpperCase(),
-      active: true,
-    }).lean();
+    const result = await query(
+      `SELECT 
+        id,
+        code,
+        discount,
+        "discountType" as type,
+        "minOrder" as "minOrderValue",
+        "maxDiscount",
+        "expiresAt"
+       FROM "Coupon"
+       WHERE UPPER(code) = UPPER($1) AND "isActive" = true AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+      [code.trim()]
+    );
 
-    if (!coupon) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Coupon not found' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Invalid or expired coupon code' });
     }
 
-    if (orderValue < (coupon.minOrderValue || 0)) {
+    const coupon = result.rows[0];
+    const minOrder = parseFloat(coupon.minOrderValue) || 0;
+    const orderValNum = parseFloat(orderValue) || 0;
+
+    if (orderValNum < minOrder) {
       return res.status(400).json({
         success: false,
-        message: `Minimum order value for this coupon is ₹${coupon.minOrderValue}`,
+        message: `Minimum order value for this coupon is ₹${minOrder}`,
       });
     }
 
-    let discount = 0;
+    let calculatedDiscount = 0;
+    const discountVal = parseFloat(coupon.discount) || 0;
 
     if (coupon.type === 'fixed') {
-      discount = coupon.value;
-    } else if (coupon.type === 'percentage') {
-      discount = Math.round(orderValue * (coupon.value / 100));
+      calculatedDiscount = discountVal;
+    } else {
+      // percentage
+      calculatedDiscount = Math.round(orderValNum * (discountVal / 100));
       if (coupon.maxDiscount) {
-        discount = Math.min(discount, coupon.maxDiscount);
+        calculatedDiscount = Math.min(calculatedDiscount, parseFloat(coupon.maxDiscount));
       }
     }
+
+    calculatedDiscount = Math.min(calculatedDiscount, orderValNum);
 
     return res.json({
       success: true,
       data: {
-        coupon,
-        discount,
+        coupon: {
+          code: coupon.code,
+          discount: discountVal,
+          type: coupon.type,
+          minOrderValue: minOrder,
+          maxDiscount: coupon.maxDiscount,
+        },
+        discount: calculatedDiscount,
       },
     });
   } catch (err) {
     console.error('validateCoupon error', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
-// Optional admin route
-export const createCoupon = async (req, res) => {
-  try {
-    const data = req.body;
-    const coupon = await Coupon.create(data);
-    res.status(201).json({ success: true, data: coupon });
-  } catch (err) {
-    console.error('createCoupon error', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+export default {
+  getActiveCoupons,
+  validateCoupon,
 };

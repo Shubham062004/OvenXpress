@@ -1,6 +1,6 @@
-import express from 'express';
 import {
   getMenuItems,
+  getMenuItemById,
   getMenuCategories,
 } from '../controllers/menuController.js';
 
@@ -11,5 +11,8 @@ router.get('/', getMenuItems);
 
 // GET /api/menu/categories
 router.get('/categories', getMenuCategories);
+
+// GET /api/menu/:id
+router.get('/:id', getMenuItemById);
 
 export default router;

@@ -13,15 +13,64 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    items: { type: [orderItemSchema], required: true },
+    orderNumber: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    branch: {
+      type: mongoose.Schema.Types.Mixed,
+      default: 1,
+    },
+    items: {
+      type: [orderItemSchema],
+      required: true,
+    },
+    orderType: {
+      type: String,
+      enum: ['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'dine-in', 'takeaway', 'delivery'],
+      default: 'DELIVERY',
+    },
+    status: {
+      type: String,
+      enum: [
+        'ORDER_PLACED',
+        'CONFIRMED',
+        'PREPARING',
+        'READY',
+        'OUT_FOR_DELIVERY',
+        'COMPLETED',
+        'CANCELLED',
+      ],
+      default: 'ORDER_PLACED',
+      index: true,
+    },
     subtotal: { type: Number, required: true },
     gst: { type: Number, required: true },
-    total: { type: Number, required: true },
+    deliveryFee: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
-    couponCode: { type: String },
-    address: { type: String, required: true },
-    paymentMethod: { type: String, enum: ['cash', 'online'], default: 'cash' },
+    total: { type: Number, required: true },
+    couponCode: { type: String, default: null },
+    address: { type: String, default: '' },
+    deliveryAddress: { type: mongoose.Schema.Types.Mixed, default: null },
+    specialInstructions: { type: String, default: '' },
+    paymentMethod: {
+      type: String,
+      enum: ['CASH', 'UPI', 'CARD', 'ONLINE', 'cash', 'online'],
+      default: 'CASH',
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+      default: 'PENDING',
+    },
   },
   { timestamps: true }
 );

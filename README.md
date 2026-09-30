@@ -1,6 +1,10 @@
-# OvenXpress - Full-Stack Food Delivery Application
+# Oven Xpress — Customer Application
 
-A complete full-stack food delivery application built with React, Node.js, Express, MongoDB, and deployed on AWS.
+> **This repository is the Oven Xpress Customer Application.**
+>
+> It is responsible exclusively for the customer-facing food ordering experience, including restaurant discovery, branch selection, menu browsing, cart management, checkout, live order tracking, and customer account management.
+>
+> Internal restaurant operations (Owner, Branch Manager, Kitchen Display System, Staff POS, Inventory, and Purchasing) are managed in the companion repository: **`Oven_Xpress`**.
 
 ## 🏗️ Project Structure
 

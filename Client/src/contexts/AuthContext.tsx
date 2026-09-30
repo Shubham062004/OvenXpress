@@ -19,6 +19,7 @@ export interface AuthContextType {
   logout: () => void;
   register?: (payload: PlainObject) => Promise<boolean>;
   setUserFromLocal?: (u: User | null, t?: string | null) => void;
+  updateUser?: (u: Partial<User>) => void;
 }
 
 const AUTH_USER_KEY = 'user';
@@ -155,6 +156,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateUser = (updatedFields: Partial<User>) => {
+    if (!user) return;
+    const updated = { ...user, ...updatedFields };
+    persistAuth(updated, token);
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -164,6 +171,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     register,
     setUserFromLocal: (u, t) => persistAuth(u ?? null, t ?? null),
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

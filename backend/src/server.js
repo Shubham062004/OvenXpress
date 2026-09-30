@@ -9,8 +9,9 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/database.js';
+import { initDB } from './config/database.js';
 
+import branchRoutes from './routes/branchRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
@@ -35,10 +36,13 @@ const io = new Server(httpServer, {
 
 app.set('io', io);
 
-// DB
-connectDB()
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(console.error);
+// DB (Neon PostgreSQL)
+initDB()
+  .then(() => console.log('✅ PostgreSQL connected & initialized'))
+  .catch((err) => {
+    console.error('❌ Failed to initialize database:', err);
+    process.exit(1);
+  });
 
 // Security / CORS
 app.use(
@@ -88,6 +92,7 @@ app.get('/health', (req, res) =>
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/branches', branchRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/coupons', couponRoutes);

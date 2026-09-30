@@ -1,4 +1,5 @@
 // src/pages/Cart.tsx
+import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranch } from '@/contexts/BranchContext';
 import { useToast } from '@/hooks/use-toast';
 import { orderAPI, couponAPI, userAPI } from '@/services/api';
 import OrderTypeSelector from '@/components/OrderTypeSelector';
@@ -42,12 +44,14 @@ interface Address {
 }
 
 interface CouponType {
-  _id: string;
+  _id?: string;
+  id?: string;
   code: string;
   title?: string;
   description?: string;
   type: 'percentage' | 'fixed';
-  value: number;
+  discount?: number;
+  value?: number;
   minOrderValue: number;
   maxDiscount?: number;
 }
@@ -58,12 +62,11 @@ interface CartItem {
   price: number;
   quantity: number;
   image?: string;
-  // extend as needed
+  notes?: string;
 }
 
 const getErrorMessage = (err: unknown): string => {
   if (!err || typeof err !== 'object') return String(err ?? 'Unknown error');
-  // axios-like error shape
   const maybe = err as Record<string, unknown>;
   const response = maybe.response as { data?: { message?: string } } | undefined;
   if (response?.data?.message && typeof response.data.message === 'string') {
@@ -74,20 +77,22 @@ const getErrorMessage = (err: unknown): string => {
 };
 
 const Cart = () => {
-  // useCart provides subtotal & items etc.
   const {
     items,
     updateQuantity,
     removeItem,
     clearCart,
     subtotal: cartSubtotal,
+    branchId: cartBranchId,
+    branchName: cartBranchName,
   } = useCart();
+  const { selectedBranch, setIsBranchModalOpen } = useBranch();
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   // UI / order state
-  const [orderType, setOrderType] = useState<OrderType>('dine-in');
+  const [orderType, setOrderType] = useState<OrderType>('delivery');
   const [selectedAddress, setSelectedAddress] = useState<string>('');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -104,9 +109,9 @@ const Cart = () => {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // pricing
+  // Authoritative restaurant GST rate (5%)
   const deliveryFee = orderType === 'delivery' ? 40 : 0;
-  const gstRate = 0.18;
+  const gstRate = 0.05;
   const subtotal = cartSubtotal ?? 0;
   const gstAmount = Math.round(subtotal * gstRate);
   const discountAmount = couponDiscount;
@@ -234,25 +239,27 @@ const Cart = () => {
       return;
     }
 
+    const selectedAddressObj = addresses.find((a) => a._id === selectedAddress);
+    const addressString = selectedAddressObj
+      ? selectedAddressObj.address ||
+        [selectedAddressObj.line1, selectedAddressObj.city, selectedAddressObj.pincode]
+          .filter(Boolean)
+          .join(', ')
+      : selectedAddress;
+
     const payload = {
       items: items.map((item: CartItem) => ({
-        menuItem: item.id,
-        name: item.name,
-        price: item.price,
+        id: item.id,
         quantity: item.quantity,
-        notes: undefined,
+        notes: item.notes,
       })),
-      orderType,
-      deliveryAddress: orderType === 'delivery' ? selectedAddress : undefined,
+      branchId: selectedBranch?.id || cartBranchId || undefined,
+      orderType: orderType === 'dine-in' ? 'DINE_IN' : orderType === 'takeaway' ? 'TAKEAWAY' : 'DELIVERY',
+      address: addressString,
+      deliveryAddress: selectedAddressObj || null,
       specialInstructions: specialInstructions || undefined,
-      couponCode: appliedCoupon?.code,
-      pricing: {
-        subtotal,
-        gstAmount,
-        deliveryFee,
-        discountAmount,
-        finalTotal,
-      },
+      couponCode: appliedCoupon?.code || undefined,
+      paymentMethod: 'CASH',
     };
 
     setIsPlacingOrder(true);
@@ -456,20 +463,80 @@ const Cart = () => {
               </Card>
 
               <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" /> Order Summary</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" /> Order Summary
+                  </CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex justify-between"><span>Subtotal</span><span>₹{subtotal}</span></div>
-                  <div className="flex justify-between"><span>GST (18%)</span><span>₹{gstAmount}</span></div>
-                  {deliveryFee > 0 && <div className="flex justify-between"><span>Delivery Fee</span><span>₹{deliveryFee}</span></div>}
-                  {discountAmount > 0 && <div className="flex justify-between text-green-600"><span>Coupon Discount</span><span>-₹{discountAmount}</span></div>}
-                  <Separator />
-                  <div className="flex justify-between text-lg font-bold"><span>Total</span><span>₹{finalTotal}</span></div>
+                  {/* Branch info */}
+                  <div className="flex items-center justify-between text-xs p-3 rounded-xl bg-muted/60 border border-border">
+                    <div className="flex items-center gap-2 text-foreground">
+                      <MapPin className="w-4 h-4 text-warm-orange shrink-0" />
+                      <span>
+                        Kitchen:{' '}
+                        <strong>{selectedBranch?.name || cartBranchName || 'Default Branch'}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsBranchModalOpen(true)}
+                      className="text-warm-orange hover:underline text-xs font-semibold"
+                    >
+                      Change
+                    </button>
+                  </div>
 
-                  <Button className="w-full bg-warm-orange hover:bg-warm-orange/90" size="lg" onClick={handlePlaceOrder} disabled={isPlacingOrder || (orderType === 'delivery' && !selectedAddress)}>
-                    {isPlacingOrder ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Placing Order...</>) : (<><Clock className="mr-2 h-4 w-4" />Place Order - ₹{finalTotal}</>)}
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span>₹{subtotal}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>GST (5%)</span>
+                    <span>₹{gstAmount}</span>
+                  </div>
+                  {deliveryFee > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>Delivery Fee</span>
+                      <span>₹{deliveryFee}</span>
+                    </div>
+                  )}
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Coupon Discount</span>
+                      <span>-₹{discountAmount}</span>
+                    </div>
+                  )}
+                  <Separator />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total</span>
+                    <span className="text-warm-orange">₹{finalTotal}</span>
+                  </div>
+
+                  <Button
+                    className="w-full bg-warm-orange hover:bg-warm-orange/90 text-white"
+                    size="lg"
+                    onClick={handlePlaceOrder}
+                    disabled={isPlacingOrder || (orderType === 'delivery' && !selectedAddress)}
+                  >
+                    {isPlacingOrder ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Placing Order...
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="mr-2 h-4 w-4" />
+                        Place Order - ₹{finalTotal}
+                      </>
+                    )}
                   </Button>
 
-                  {orderType === 'delivery' && !selectedAddress && <p className="text-sm text-muted-foreground text-center">Please select a delivery address to continue</p>}
+                  {orderType === 'delivery' && !selectedAddress && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Please select a delivery address to continue
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -478,7 +545,11 @@ const Cart = () => {
       </div>
 
       {showCouponSuccess && appliedCoupon && (
-        <CouponSuccessPopup coupon={appliedCoupon} discount={couponDiscount} onClose={() => setShowCouponSuccess(false)} />
+        <CouponSuccessPopup
+          show={showCouponSuccess}
+          couponCode={appliedCoupon.code}
+          onClose={() => setShowCouponSuccess(false)}
+        />
       )}
     </div>
   );

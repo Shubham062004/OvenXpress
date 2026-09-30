@@ -62,6 +62,10 @@ const userSchema = new Schema(
     profileImage: { type: String, default: '' },
 
     isActive: { type: Boolean, default: true },
+
+    // Password reset fields
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
   },
   { timestamps: true }
 );
